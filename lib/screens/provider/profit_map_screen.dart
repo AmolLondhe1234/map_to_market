@@ -40,6 +40,7 @@ class _ProfitMapScreenState extends State<ProfitMapScreen>
   late Animation<double> _panelSlideAnim;
 
   final String googleMapsApiKey = AppConfig.googleMapsApiKey;
+  final String placesApiKey = AppConfig.placesApiKey;
   final String apiBaseUrl = AppConfig.apiBaseUrl;
 
   // All business categories with metadata
@@ -231,7 +232,7 @@ class _ProfitMapScreenState extends State<ProfitMapScreen>
         '?location=${zone.latitude},${zone.longitude}'
         '&radius=500'
         '&type=$_selectedCategory'
-        '&key=$googleMapsApiKey',
+        '&key=$placesApiKey',
       )).timeout(const Duration(seconds: 4));
 
       int competitorCount = 0;
@@ -246,7 +247,7 @@ class _ProfitMapScreenState extends State<ProfitMapScreen>
         '?location=${zone.latitude},${zone.longitude}'
         '&radius=600'
         '&type=transit_station|shopping_mall|office|university|residential'
-        '&key=$googleMapsApiKey',
+        '&key=$placesApiKey',
       )).timeout(const Duration(seconds: 4));
 
       int demandIndicators = 0;

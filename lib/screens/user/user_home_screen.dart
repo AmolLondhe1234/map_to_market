@@ -60,6 +60,7 @@ class _UserHomeScreenState extends State<UserHomeScreen>
   late Animation<double> _pulseAnimation;
 
   final String googleMapsApiKey = AppConfig.googleMapsApiKey;
+  final String placesApiKey = AppConfig.placesApiKey;
   final String apiBaseUrl = AppConfig.apiBaseUrl;
 
   // Category config with colors
@@ -148,9 +149,12 @@ class _UserHomeScreenState extends State<UserHomeScreen>
         _updateUserLocationMarker();
       });
 
-      mapController.animateCamera(CameraUpdate.newLatLngZoom(_currentPosition!, 15));
+      // Animate camera safely (map may not be ready yet — _onMapCreated handles it)
+      try {
+        mapController.animateCamera(CameraUpdate.newLatLngZoom(_currentPosition!, 15));
+      } catch (_) {}
 
-      // Load all categories by default
+      // Load all nearby places
       await _loadAllCategories();
 
       // Listen to live location updates
@@ -194,8 +198,14 @@ class _UserHomeScreenState extends State<UserHomeScreen>
 
   void _onMapCreated(GoogleMapController controller) {
     mapController = controller;
+    // Once map is ready, move camera to user location and load places
     if (_currentPosition != null) {
       mapController.animateCamera(CameraUpdate.newLatLngZoom(_currentPosition!, 15));
+      // Reload places now that we know the map is ready
+      if (_markers.length <= 1) {
+        // Only user location marker exists — places haven't loaded yet
+        _loadAllCategories();
+      }
     }
   }
 
@@ -225,14 +235,24 @@ class _UserHomeScreenState extends State<UserHomeScreen>
             '?location=${_currentPosition!.latitude},${_currentPosition!.longitude}'
             '&radius=1500'
             '&type=${cat['value']}'
-            '&key=$googleMapsApiKey',
+            '&key=$placesApiKey',
           );
           final response = await http.get(url).timeout(const Duration(seconds: 8));
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
-            return {'category': cat, 'results': data['results'] as List};
+            final status = data['status'] as String? ?? 'UNKNOWN';
+            final results = data['results'] as List? ?? [];
+            debugPrint('Places API [${cat['name']}]: status=$status, count=${results.length}');
+            if (status != 'OK' && status != 'ZERO_RESULTS') {
+              debugPrint('Places API ERROR [${cat['name']}]: ${data['error_message'] ?? status}');
+            }
+            return {'category': cat, 'results': results};
+          } else {
+            debugPrint('Places API HTTP Error [${cat['name']}]: ${response.statusCode}');
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('Places API Exception [${cat['name']}]: $e');
+        }
         return {'category': cat, 'results': []};
       });
 
@@ -327,7 +347,7 @@ class _UserHomeScreenState extends State<UserHomeScreen>
             '?location=${_currentPosition!.latitude},${_currentPosition!.longitude}'
             '&radius=2000'
             '&type=$type'
-            '&key=$googleMapsApiKey',
+            '&key=$placesApiKey',
           );
           final response = await http.get(url).timeout(const Duration(seconds: 8));
           if (response.statusCode == 200) {
@@ -404,7 +424,7 @@ class _UserHomeScreenState extends State<UserHomeScreen>
   Future<void> _getRoutePolyline() async {
     if (_currentPosition == null || _destinationPosition == null) return;
 
-    poly.PolylinePoints polylinePoints = poly.PolylinePoints(apiKey: googleMapsApiKey);
+    poly.PolylinePoints polylinePoints = poly.PolylinePoints(apiKey: placesApiKey);
     poly.PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
       request: poly.PolylineRequest(
         origin: poly.PointLatLng(_currentPosition!.latitude, _currentPosition!.longitude),
@@ -582,7 +602,7 @@ class _UserHomeScreenState extends State<UserHomeScreen>
                     ),
                     child: GooglePlaceAutoCompleteTextField(
                       textEditingController: TextEditingController(),
-                      googleAPIKey: googleMapsApiKey,
+                      googleAPIKey: placesApiKey,
                       inputDecoration: const InputDecoration(
                         hintText: "Search shops, places...",
                         border: InputBorder.none,
